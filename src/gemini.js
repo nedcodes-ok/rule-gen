@@ -14,64 +14,50 @@ function buildPrompt(files, projectPath) {
       const pkg = JSON.parse(pkgFile.content);
       const deps = Object.keys(pkg.dependencies || {});
       const devDeps = Object.keys(pkg.devDependencies || {});
-      projectInfo = `
-DETECTED STACK:
-- Dependencies: ${deps.join(', ') || 'none'}
-- Dev dependencies: ${devDeps.join(', ') || 'none'}
-- Type: ${pkg.type || 'commonjs'}
-`;
+      projectInfo = `\nStack: ${deps.concat(devDeps).join(', ') || 'none'} | Type: ${pkg.type || 'commonjs'}`;
     } catch { /* ignore parse errors */ }
   }
 
-  let prompt = `You are an expert at writing Cursor .mdc rules. Your job is to analyze a SPECIFIC codebase and generate rules that capture THIS project's unique patterns.
+  let prompt = `You are writing rules for an AI coding assistant. These rules tell the AI HOW TO WRITE NEW CODE in this project. They are NOT documentation of what the code does.
 
-PROJECT: ${projectName}
-${projectInfo}
-CRITICAL INSTRUCTION: Do NOT generate generic coding advice. Every rule you write must reference a specific pattern you observed in the files below. If you can't point to a line of code that demonstrates the pattern, don't write the rule.
+PROJECT: ${projectName}${projectInfo}
 
-BAD (generic): "Use const instead of let" — any linter catches this
-BAD (generic): "Prefer async/await" — obvious, not project-specific  
-BAD (generic): "Use PascalCase for components" — standard convention everyone knows
+WHAT ARE RULES FOR:
+Rules guide an AI that is writing or modifying code in this project. They answer: "If the AI needs to add a new feature or fix a bug, what patterns must it follow?"
 
-GOOD (specific): "This project exports a singleton pattern from db.ts — always import prisma from '../db', never instantiate PrismaClient directly"
-GOOD (specific): "Route files in src/routes/ follow a pattern: export a Router, validate with Zod schemas before handlers, return consistent { data } or { error } shapes"
-GOOD (specific): "All CLI commands use the same structure: parse args, validate, call a pure function from src/, format output — keep side effects in cli.js only"
+BAD RULE (describes what code does — useless as a rule):
+"The lintMdcFile function validates .mdc files by checking frontmatter fields"
+— This just describes existing code. The AI can read the code itself.
 
-WHAT TO LOOK FOR:
-1. How does this project structure its modules? (barrel exports, flat files, feature folders)
-2. What patterns repeat across multiple files? (error handling, validation, response shapes)
-3. What conventions would an AI get wrong without guidance? (import paths, naming patterns unique to this project)
-4. What architectural boundaries exist? (separation of concerns, where side effects live)
-5. What framework-specific patterns does this project use? (not generic framework advice — THIS project's usage)
+GOOD RULE (tells AI what pattern to follow when writing new code):
+"When adding a new CLI command: add the case in src/cli.js, implement the logic in a separate src/<feature>.js module, export a single function that takes (cwd) as its first argument"
+— This tells the AI what to DO when making changes.
 
-OUTPUT FORMAT:
-Generate each rule in this exact format, separated by ===RULE===
+MORE EXAMPLES OF GOOD RULES:
+- "Error messages in this project follow the pattern: 'Error: <what failed>. <suggestion to fix it>.' Always include a fix suggestion."
+- "New parser files go in src/parsers/ and must export a single parse(content) function that returns { frontmatter, body }"
+- "This project has zero dependencies by design. Never add an npm dependency. Use Node.js built-in modules only."
+
+STEP 1: Read the code below. Ask yourself: if a new developer joined this project, what non-obvious conventions would they need to follow?
+STEP 2: Write 5-8 rules capturing those conventions. Each rule = one pattern.
+
+OUTPUT FORMAT — separate each rule with ===RULE=== on its own line:
 
 ---
-description: One-line description referencing this specific project
-globs: ["actual/paths/from/this/project/**/*.ext"]
+description: One-line description
+globs: ["src/actual-dir/**/*.js"]
 alwaysApply: false
 ---
 
 # Rule Title
 
-Specific instructions referencing actual file paths, function names, and patterns from this codebase.
-Include a concrete example from the actual code when possible.
+Instructions for the AI about what pattern to follow.
 
 ===RULE===
 
-CONSTRAINTS:
-- Generate EXACTLY 5-8 rules. No more. No fewer.
-- If you find yourself generating more than 8, you are being too granular. Merge related patterns into single rules.
-- Set alwaysApply: true for max 2 rules (only truly project-wide conventions)
-- Use glob patterns that match ACTUAL directories in this project (e.g., "src/routes/**" not "**/*.ts")
-- Each rule 100-250 words
-- Every rule must reference something specific from the code below
-- ONE rule per architectural pattern, not one rule per code branch or validation check
-- No rules about: semicolons, trailing commas, const vs let, basic TypeScript, obvious framework conventions
-- Do NOT enumerate every validation check in a file as separate rules — describe the PATTERN, not the checks
+IMPORTANT: Use exactly the YAML frontmatter format shown above (between --- delimiters). Do not use markdown headers like ## Description.
 
-Here are the codebase files:
+FILES:
 
 `;
 
@@ -80,33 +66,82 @@ Here are the codebase files:
     prompt += `## ${file.relativePath}\n\`\`\`${ext}\n${file.content}\n\`\`\`\n\n`;
   }
 
+  // Final constraint reminder — last thing the model sees
+  prompt += `
+FINAL INSTRUCTIONS (read carefully):
+- Output EXACTLY 5-8 rules total. Not 9. Not 15. Count them.
+- Max 2 rules with alwaysApply: true
+- Each rule 100-250 words
+- Use globs matching ACTUAL directories from the files above
+- If you wrote more than 8 rules, stop, pick the 8 most important, delete the rest
+`;
+
   return prompt;
 }
 
 function parseRules(text) {
-  const chunks = text.split('===RULE===').map(s => s.trim()).filter(Boolean);
+  // Try splitting on ===RULE=== first, fall back to splitting on frontmatter boundaries
+  let chunks = text.split('===RULE===').map(s => s.trim()).filter(Boolean);
+
+  // If we got only 1 chunk but it contains multiple frontmatter blocks, split on those
+  if (chunks.length <= 1 && text.match(/---\n/g)?.length > 2) {
+    // Split on lines that start a new frontmatter block (--- followed by description:)
+    chunks = text.split(/(?=---\ndescription:)/g).map(s => s.trim()).filter(Boolean);
+    // Also try splitting on "---\n" that appears after content (end of a rule, start of next)
+    if (chunks.length <= 1) {
+      chunks = text.split(/\n(?=---\n(?:description|globs|alwaysApply):)/g).map(s => s.trim()).filter(Boolean);
+    }
+  }
+
   const rules = [];
 
   for (const chunk of chunks) {
-    // Extract frontmatter — may have text before the ---
+    let description = 'Generated rule';
+    let globs = '["**/*"]';
+    let alwaysApply = 'false';
+    let body = '';
+
+    // Try standard YAML frontmatter first
     const fmMatch = chunk.match(/---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-    if (!fmMatch) continue;
+    if (fmMatch) {
+      const frontmatter = fmMatch[1];
+      body = fmMatch[2].trim();
 
-    const frontmatter = fmMatch[1];
-    const body = fmMatch[2].trim();
+      const descMatch = frontmatter.match(/description:\s*(.+)/);
+      const globsMatch = frontmatter.match(/globs:\s*(\[.+\])/);
+      const alwaysMatch = frontmatter.match(/alwaysApply:\s*(true|false)/);
 
-    // Parse frontmatter fields
-    const descMatch = frontmatter.match(/description:\s*(.+)/);
-    const globsMatch = frontmatter.match(/globs:\s*(\[.+\])/);
-    const alwaysMatch = frontmatter.match(/alwaysApply:\s*(true|false)/);
+      if (descMatch) description = descMatch[1].trim();
+      if (globsMatch) globs = globsMatch[1];
+      if (alwaysMatch) alwaysApply = alwaysMatch[1];
+    } else {
+      // Fallback: parse markdown-style metadata (bold labels)
+      const descMd = chunk.match(/\*\*Description:\*\*\s*(.+)/);
+      const globsMd = chunk.match(/\*\*Globs?:\*\*\s*`?(\[.+?\])`?/);
+      const alwaysMd = chunk.match(/\*\*alwaysApply:\*\*\s*(true|false)/i);
 
-    const description = descMatch ? descMatch[1].trim() : 'Generated rule';
-    const globs = globsMatch ? globsMatch[1] : '["**/*"]';
-    const alwaysApply = alwaysMatch ? alwaysMatch[1] : 'false';
+      if (descMd) description = descMd[1].trim();
+      if (globsMd) globs = globsMd[1];
+      if (alwaysMd) alwaysApply = alwaysMd[1];
+
+      // Extract the rule body — everything after **Rule:** or the title
+      const ruleBodyMatch = chunk.match(/\*\*Rule:\*\*\n([\s\S]*)/);
+      if (ruleBodyMatch) {
+        // Get title from the chunk and prepend it
+        const titleLine = chunk.match(/^#\s+(.+)/m);
+        body = titleLine ? `${titleLine[0]}\n\n${ruleBodyMatch[1].trim()}` : ruleBodyMatch[1].trim();
+      } else {
+        // Just grab everything starting from the title
+        const titleIdx = chunk.search(/^#\s+/m);
+        if (titleIdx >= 0) body = chunk.slice(titleIdx).trim();
+      }
+    }
+
+    if (!body) continue;
 
     // Generate filename from title
     const titleMatch = body.match(/^#\s+(.+)/m);
-    const title = titleMatch ? titleMatch[1] : 'generated-rule';
+    const title = titleMatch ? titleMatch[1].replace(/^Rule:\s*/i, '') : 'generated-rule';
     const filename = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -175,6 +210,8 @@ function apiRequest(model, apiKey, prompt) {
   });
 }
 
+const MAX_RULES = 8;
+
 export const gemini = {
   async generate(files, model, apiKey, projectPath) {
     const prompt = buildPrompt(files, projectPath);
@@ -184,6 +221,14 @@ export const gemini = {
       console.log(`  API usage: ${usage.promptTokenCount.toLocaleString()} input, ${usage.candidatesTokenCount?.toLocaleString() || '?'} output tokens`);
     }
 
-    return parseRules(text);
+    let rules = parseRules(text);
+
+    // Hard cap — if model overproduced, take the first N
+    if (rules.length > MAX_RULES) {
+      console.log(`  ⚠ Model generated ${rules.length} rules, capping to ${MAX_RULES}`);
+      rules = rules.slice(0, MAX_RULES);
+    }
+
+    return rules;
   },
 };
