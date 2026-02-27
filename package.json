@@ -1,10 +1,11 @@
 {
-  "name": "rule-gen",
+  "name": "rulegen-ai",
   "version": "1.0.0",
   "description": "Generate AI coding rules from your codebase using Google Gemini",
   "main": "src/index.js",
   "bin": {
-    "rule-gen": "bin/rule-gen.js"
+    "rule-gen": "bin/rule-gen.js",
+    "rulegen-ai": "bin/rule-gen.js"
   },
   "type": "module",
   "scripts": {

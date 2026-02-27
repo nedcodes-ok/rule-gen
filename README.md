@@ -8,7 +8,7 @@ Most rule generators read your `package.json` and spit out generic templates. ru
 
 ```bash
 export GEMINI_API_KEY=your-key-here
-npx rule-gen
+npx rulegen-ai
 ```
 
 Get a free API key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
@@ -16,7 +16,7 @@ Get a free API key at [aistudio.google.com/apikey](https://aistudio.google.com/a
 ## What It Does
 
 ```
-$ npx rule-gen ./my-express-api
+$ npx rulegen-ai ./my-express-api
 
 Scanning ./my-express-api...
   Found 47 files
