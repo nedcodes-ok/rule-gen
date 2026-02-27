@@ -18,7 +18,7 @@ Arguments:
 
 Options:
   --format <format>   Output format: cursor (default), claude-md, agents-md, copilot, windsurf
-  --model <model>     Gemini model to use (default: gemini-2.5-flash)
+  --model <model>     Gemini model to use (default: gemini-2.5-flash-lite)
   --dry-run           Preview rules without writing files
   --verbose           Show which files are sent to Gemini
   --max-files <n>     Max source files to include (default: 50)
@@ -38,7 +38,7 @@ function parseArgs(argv) {
   const opts = {
     path: '.',
     format: 'cursor',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-2.5-flash-lite',
     dryRun: false,
     verbose: false,
     maxFiles: 50,

@@ -6,49 +6,70 @@ const API_BASE = 'generativelanguage.googleapis.com';
 function buildPrompt(files, projectPath) {
   const projectName = basename(projectPath);
 
-  let prompt = `You are an expert AI coding rules generator. Analyze the following codebase and generate Cursor .mdc rule files.
+  // Detect project info from config files
+  const pkgFile = files.find(f => f.relativePath === 'package.json');
+  let projectInfo = '';
+  if (pkgFile) {
+    try {
+      const pkg = JSON.parse(pkgFile.content);
+      const deps = Object.keys(pkg.dependencies || {});
+      const devDeps = Object.keys(pkg.devDependencies || {});
+      projectInfo = `
+DETECTED STACK:
+- Dependencies: ${deps.join(', ') || 'none'}
+- Dev dependencies: ${devDeps.join(', ') || 'none'}
+- Type: ${pkg.type || 'commonjs'}
+`;
+    } catch { /* ignore parse errors */ }
+  }
+
+  let prompt = `You are an expert at writing Cursor .mdc rules. Your job is to analyze a SPECIFIC codebase and generate rules that capture THIS project's unique patterns.
 
 PROJECT: ${projectName}
+${projectInfo}
+CRITICAL INSTRUCTION: Do NOT generate generic coding advice. Every rule you write must reference a specific pattern you observed in the files below. If you can't point to a line of code that demonstrates the pattern, don't write the rule.
 
-Your job:
-1. Read every file carefully
-2. Identify coding patterns, conventions, architecture decisions, and style preferences
-3. Generate specific, actionable rules that an AI coding assistant should follow when working in this codebase
+BAD (generic): "Use const instead of let" — any linter catches this
+BAD (generic): "Prefer async/await" — obvious, not project-specific  
+BAD (generic): "Use PascalCase for components" — standard convention everyone knows
 
-Rules you generate should be SPECIFIC to this project — not generic advice. Look for:
-- Naming conventions (camelCase vs snake_case, prefixes, suffixes)
-- Import patterns (relative vs absolute, aliases, barrel exports)
-- Error handling patterns
-- State management approach
-- API/route structure conventions
-- Testing patterns and conventions
-- Component/module structure
-- Type usage (TypeScript strictness, Zod schemas, etc.)
-- Framework-specific patterns (React hooks, Next.js conventions, Express middleware, etc.)
+GOOD (specific): "This project exports a singleton pattern from db.ts — always import prisma from '../db', never instantiate PrismaClient directly"
+GOOD (specific): "Route files in src/routes/ follow a pattern: export a Router, validate with Zod schemas before handlers, return consistent { data } or { error } shapes"
+GOOD (specific): "All CLI commands use the same structure: parse args, validate, call a pure function from src/, format output — keep side effects in cli.js only"
+
+WHAT TO LOOK FOR:
+1. How does this project structure its modules? (barrel exports, flat files, feature folders)
+2. What patterns repeat across multiple files? (error handling, validation, response shapes)
+3. What conventions would an AI get wrong without guidance? (import paths, naming patterns unique to this project)
+4. What architectural boundaries exist? (separation of concerns, where side effects live)
+5. What framework-specific patterns does this project use? (not generic framework advice — THIS project's usage)
 
 OUTPUT FORMAT:
 Generate each rule in this exact format, separated by ===RULE===
 
 ---
-description: One-line description of what this rule enforces
-globs: ["glob/pattern/**/*.ext"]
+description: One-line description referencing this specific project
+globs: ["actual/paths/from/this/project/**/*.ext"]
 alwaysApply: false
 ---
 
 # Rule Title
 
-Detailed instructions for the AI assistant. Be specific and actionable.
-Include DO and DON'T examples where helpful.
+Specific instructions referencing actual file paths, function names, and patterns from this codebase.
+Include a concrete example from the actual code when possible.
 
 ===RULE===
 
-GUIDELINES:
-- Generate 5-10 rules depending on codebase complexity
-- Set alwaysApply: true only for project-wide conventions (max 2-3 rules)
-- Use accurate glob patterns that match the relevant files
-- Each rule should be 100-300 words — enough detail to be useful, not so long it wastes context
-- Don't generate rules for things that linters already catch (semicolons, trailing commas)
-- Focus on patterns that an AI would get wrong without guidance
+CONSTRAINTS:
+- Generate EXACTLY 5-8 rules. No more. No fewer.
+- If you find yourself generating more than 8, you are being too granular. Merge related patterns into single rules.
+- Set alwaysApply: true for max 2 rules (only truly project-wide conventions)
+- Use glob patterns that match ACTUAL directories in this project (e.g., "src/routes/**" not "**/*.ts")
+- Each rule 100-250 words
+- Every rule must reference something specific from the code below
+- ONE rule per architectural pattern, not one rule per code branch or validation check
+- No rules about: semicolons, trailing commas, const vs let, basic TypeScript, obvious framework conventions
+- Do NOT enumerate every validation check in a file as separate rules — describe the PATTERN, not the checks
 
 Here are the codebase files:
 
