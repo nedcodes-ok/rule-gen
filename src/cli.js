@@ -18,7 +18,7 @@ Arguments:
 
 Options:
   --format <format>   Output format: cursor (default), claude-md, agents-md, copilot, windsurf
-  --model <model>     Gemini model to use (default: gemini-2.5-flash-lite)
+  --model <model>     Gemini model (default: gemini-2.5-flash-lite)
   --dry-run           Preview rules without writing files
   --verbose           Show which files are sent to Gemini
   --max-files <n>     Max source files to include (default: 50)
@@ -27,11 +27,12 @@ Options:
   -h, --help          Show help
 
 Examples:
-  npx rule-gen                          # Scan current directory, output .mdc files
-  npx rule-gen ./my-project             # Scan specific directory
+  npx rule-gen                          # Scan current dir, output .mdc files
+  npx rule-gen ./my-project             # Scan specific project
   npx rule-gen --format claude-md       # Output as CLAUDE.md
+  npx rule-gen --format copilot         # Output for GitHub Copilot
   npx rule-gen --dry-run --verbose      # Preview without writing
-  npx rule-gen --model gemini-2.5-pro   # Use Gemini Pro for higher quality
+  npx rule-gen --model gemini-2.5-pro   # Use Pro for higher quality
 `.trim();
 
 function parseArgs(argv) {
