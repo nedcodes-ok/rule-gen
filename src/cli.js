@@ -102,6 +102,13 @@ export async function main(argv) {
     process.exit(1);
   }
 
+  // Need at least one actual source file (not just config)
+  const sourceFiles = files.filter(f => !f.isConfig);
+  if (sourceFiles.length === 0) {
+    console.error('Only config files found — need source code files to generate meaningful rules.');
+    process.exit(1);
+  }
+
   // Phase 2: Budget
   const selected = budgeter.select(files, opts.maxFiles);
   console.log(`  Selected ${selected.length} files for analysis`);
