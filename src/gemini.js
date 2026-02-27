@@ -3,6 +3,25 @@ import { basename } from 'node:path';
 
 const API_BASE = 'generativelanguage.googleapis.com';
 
+const RULE_SCHEMA = {
+  type: "ARRAY",
+  items: {
+    type: "OBJECT",
+    properties: {
+      title: { type: "STRING", description: "Short descriptive title for the rule" },
+      description: { type: "STRING", description: "One-line description of what pattern this rule enforces" },
+      globs: {
+        type: "ARRAY",
+        items: { type: "STRING" },
+        description: "File glob patterns this rule applies to, using actual directories from the project"
+      },
+      alwaysApply: { type: "BOOLEAN", description: "True only for project-wide conventions (max 2)" },
+      body: { type: "STRING", description: "Full rule instructions telling an AI how to follow this pattern when writing new code" }
+    },
+    required: ["title", "description", "globs", "alwaysApply", "body"]
+  }
+};
+
 function buildPrompt(files, projectPath) {
   const projectName = basename(projectPath);
 
@@ -41,21 +60,12 @@ MORE EXAMPLES OF GOOD RULES:
 STEP 1: Read the code below. Ask yourself: if a new developer joined this project, what non-obvious conventions would they need to follow?
 STEP 2: Write 5-8 rules capturing those conventions. Each rule = one pattern.
 
-OUTPUT FORMAT — separate each rule with ===RULE=== on its own line:
-
----
-description: One-line description
-globs: ["src/actual-dir/**/*.js"]
-alwaysApply: false
----
-
-# Rule Title
-
-Instructions for the AI about what pattern to follow.
-
-===RULE===
-
-IMPORTANT: Use exactly the YAML frontmatter format shown above (between --- delimiters). Do not use markdown headers like ## Description.
+CONSTRAINTS:
+- Generate EXACTLY 5-8 rules. Not 9. Not 15.
+- Max 2 rules with alwaysApply: true
+- Each rule body should be 100-250 words
+- Use globs matching ACTUAL directories from the files below
+- The "title" field should be a short descriptive name (e.g. "cli-command-structure", "error-message-format")
 
 FILES:
 
@@ -68,26 +78,42 @@ FILES:
 
   // Final constraint reminder — last thing the model sees
   prompt += `
-FINAL INSTRUCTIONS (read carefully):
-- Output EXACTLY 5-8 rules total. Not 9. Not 15. Count them.
-- Max 2 rules with alwaysApply: true
-- Each rule 100-250 words
-- Use globs matching ACTUAL directories from the files above
-- If you wrote more than 8 rules, stop, pick the 8 most important, delete the rest
+FINAL REMINDER: Generate 5-8 rules about how to write NEW code in this project. Not documentation of existing code. Each rule should help an AI follow the project's conventions.
 `;
 
   return prompt;
 }
 
+function structuredRulesToOutput(rules) {
+  return rules.map(rule => {
+    const filename = rule.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 50);
+
+    const globs = JSON.stringify(rule.globs);
+    const content = `---
+description: ${rule.description}
+globs: ${globs}
+alwaysApply: ${rule.alwaysApply}
+---
+
+# ${rule.title}
+
+${rule.body}
+`;
+
+    return { filename, content, title: rule.title, description: rule.description };
+  });
+}
+
+// Legacy parser for models that don't support structured output
 function parseRules(text) {
-  // Try splitting on ===RULE=== first, fall back to splitting on frontmatter boundaries
   let chunks = text.split('===RULE===').map(s => s.trim()).filter(Boolean);
 
-  // If we got only 1 chunk but it contains multiple frontmatter blocks, split on those
   if (chunks.length <= 1 && text.match(/---\n/g)?.length > 2) {
-    // Split on lines that start a new frontmatter block (--- followed by description:)
     chunks = text.split(/(?=---\ndescription:)/g).map(s => s.trim()).filter(Boolean);
-    // Also try splitting on "---\n" that appears after content (end of a rule, start of next)
     if (chunks.length <= 1) {
       chunks = text.split(/\n(?=---\n(?:description|globs|alwaysApply):)/g).map(s => s.trim()).filter(Boolean);
     }
@@ -101,7 +127,6 @@ function parseRules(text) {
     let alwaysApply = 'false';
     let body = '';
 
-    // Try standard YAML frontmatter first
     const fmMatch = chunk.match(/---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     if (fmMatch) {
       const frontmatter = fmMatch[1];
@@ -115,7 +140,6 @@ function parseRules(text) {
       if (globsMatch) globs = globsMatch[1];
       if (alwaysMatch) alwaysApply = alwaysMatch[1];
     } else {
-      // Fallback: parse markdown-style metadata (bold labels)
       const descMd = chunk.match(/\*\*Description:\*\*\s*(.+)/);
       const globsMd = chunk.match(/\*\*Globs?:\*\*\s*`?(\[.+?\])`?/);
       const alwaysMd = chunk.match(/\*\*alwaysApply:\*\*\s*(true|false)/i);
@@ -124,14 +148,11 @@ function parseRules(text) {
       if (globsMd) globs = globsMd[1];
       if (alwaysMd) alwaysApply = alwaysMd[1];
 
-      // Extract the rule body — everything after **Rule:** or the title
       const ruleBodyMatch = chunk.match(/\*\*Rule:\*\*\n([\s\S]*)/);
       if (ruleBodyMatch) {
-        // Get title from the chunk and prepend it
         const titleLine = chunk.match(/^#\s+(.+)/m);
         body = titleLine ? `${titleLine[0]}\n\n${ruleBodyMatch[1].trim()}` : ruleBodyMatch[1].trim();
       } else {
-        // Just grab everything starting from the title
         const titleIdx = chunk.search(/^#\s+/m);
         if (titleIdx >= 0) body = chunk.slice(titleIdx).trim();
       }
@@ -139,7 +160,6 @@ function parseRules(text) {
 
     if (!body) continue;
 
-    // Generate filename from title
     const titleMatch = body.match(/^#\s+(.+)/m);
     const title = titleMatch ? titleMatch[1].replace(/^Rule:\s*/i, '') : 'generated-rule';
     const filename = title
@@ -156,14 +176,21 @@ function parseRules(text) {
   return rules;
 }
 
-function apiRequest(model, apiKey, prompt) {
+function apiRequest(model, apiKey, prompt, useStructured) {
   return new Promise((resolve, reject) => {
+    const genConfig = {
+      temperature: 0.3,
+      maxOutputTokens: 16384,
+    };
+
+    if (useStructured) {
+      genConfig.responseMimeType = "application/json";
+      genConfig.responseSchema = RULE_SCHEMA;
+    }
+
     const payload = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 16384,
-      },
+      generationConfig: genConfig,
     });
 
     const options = {
@@ -174,7 +201,7 @@ function apiRequest(model, apiKey, prompt) {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
       },
-      timeout: 120000, // 2 minute timeout
+      timeout: 300000, // 5 minute timeout for thinking models
     };
 
     const req = request(options, (res) => {
@@ -202,7 +229,7 @@ function apiRequest(model, apiKey, prompt) {
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('Gemini API request timed out (120s). Try --max-files to reduce input size.'));
+      reject(new Error('Gemini API request timed out. Try --max-files to reduce input size.'));
     });
     req.on('error', reject);
     req.write(payload);
@@ -215,15 +242,31 @@ const MAX_RULES = 8;
 export const gemini = {
   async generate(files, model, apiKey, projectPath) {
     const prompt = buildPrompt(files, projectPath);
-    const { text, usage } = await apiRequest(model, apiKey, prompt);
+
+    // Use structured output for all models
+    let useStructured = true;
+    const { text, usage } = await apiRequest(model, apiKey, prompt, useStructured);
 
     if (usage.promptTokenCount) {
       console.log(`  API usage: ${usage.promptTokenCount.toLocaleString()} input, ${usage.candidatesTokenCount?.toLocaleString() || '?'} output tokens`);
     }
 
-    let rules = parseRules(text);
+    let rules;
 
-    // Hard cap — if model overproduced, take the first N
+    if (useStructured) {
+      try {
+        const parsed = JSON.parse(text);
+        rules = structuredRulesToOutput(parsed);
+      } catch {
+        // Structured output failed, fall back to text parsing
+        console.log('  ⚠ Structured output parse failed, falling back to text parser');
+        rules = parseRules(text);
+      }
+    } else {
+      rules = parseRules(text);
+    }
+
+    // Hard cap
     if (rules.length > MAX_RULES) {
       console.log(`  ⚠ Model generated ${rules.length} rules, capping to ${MAX_RULES}`);
       rules = rules.slice(0, MAX_RULES);
