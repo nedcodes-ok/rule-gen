@@ -4,8 +4,6 @@
 
 Generate AI coding rules from your codebase, powered by Google Gemini.
 
-![rule-gen terminal demo](terminal-demo.png)
-
 Most rule generators read your `package.json` and spit out generic templates. rule-gen feeds your **actual source code** into Gemini's 1M token context window and generates rules based on patterns it finds in *your* codebase.
 
 ## Quick Start
