@@ -1,7 +1,7 @@
 {
   "name": "rulegen-ai",
   "version": "1.1.0",
-  "description": "Generate AI coding rules from your codebase using Google Gemini",
+  "description": "Generate AI coding rules from your codebase using Google Gemini. Zero dependencies. Supports Cursor, Claude Code, Copilot, Windsurf.",
   "main": "src/index.js",
   "bin": {
     "rule-gen": "bin/rule-gen.js",
@@ -23,7 +23,10 @@
     "ai-coding",
     "rules-generator",
     "code-analysis",
-    "developer-tools"
+    "developer-tools",
+    "zero-dependencies",
+    "npx",
+    "cli-tool"
   ],
   "author": "nedcodes",
   "license": "MIT",
