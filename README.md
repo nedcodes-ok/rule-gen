@@ -88,7 +88,7 @@ Built with Node.js built-in modules only (`node:https`, `node:fs`, `node:path`).
 - Node.js 18+
 - A [Google Gemini API key](https://aistudio.google.com/apikey) (free tier works)
 
-## Part of the nedcodes ecosystem
+## Part of the [nedcodes](https://nedcodes.dev) ecosystem
 
 | Tool | What it does |
 |------|-------------|
