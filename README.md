@@ -1,5 +1,7 @@
 # rule-gen
 
+[![npm version](https://img.shields.io/npm/v/rulegen-ai)](https://www.npmjs.com/package/rulegen-ai) [![npm downloads](https://img.shields.io/npm/dw/rulegen-ai)](https://www.npmjs.com/package/rulegen-ai) [![license](https://img.shields.io/npm/l/rulegen-ai)](https://github.com/nedcodes-ok/rule-gen/blob/main/LICENSE) [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)](https://github.com/nedcodes-ok/rule-gen/blob/main/CONTRIBUTING.md)
+
 Generate AI coding rules from your codebase, powered by Google Gemini.
 
 Most rule generators read your `package.json` and spit out generic templates. rule-gen feeds your **actual source code** into Gemini's 1M token context window and generates rules based on patterns it finds in *your* codebase.
