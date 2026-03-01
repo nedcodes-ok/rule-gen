@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { scanner } from './scanner.js';
 import { budgeter } from './budgeter.js';
 import { gemini } from './gemini.js';
@@ -7,6 +7,8 @@ import { writer } from './writer.js';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
 const VERSION = pkg.version;
+
+const VALID_FORMATS = ['cursor', 'claude-md', 'agents-md', 'copilot', 'windsurf'];
 
 const HELP = `
 rule-gen v${VERSION}
@@ -71,6 +73,10 @@ function parseArgs(argv) {
         break;
       case '--max-files':
         opts.maxFiles = parseInt(argv[++i], 10);
+        if (isNaN(opts.maxFiles) || opts.maxFiles < 1) {
+          console.error(`Error: --max-files must be a positive number, got: ${argv[i]}`);
+          process.exit(1);
+        }
         break;
       case '--api-key':
         opts.apiKey = argv[++i];
@@ -88,8 +94,21 @@ export async function main(argv) {
   const opts = parseArgs(argv);
   const projectPath = resolve(opts.path);
 
+  // Validate format early (before API call)
+  if (!VALID_FORMATS.includes(opts.format)) {
+    console.error(`Error: Invalid format '${opts.format}'. Valid formats: ${VALID_FORMATS.join(', ')}`);
+    process.exit(1);
+  }
+
   if (!existsSync(projectPath)) {
     console.error(`Error: Directory not found: ${projectPath}`);
+    process.exit(1);
+  }
+
+  // Check if path is a file instead of a directory
+  const stats = statSync(projectPath);
+  if (!stats.isDirectory()) {
+    console.error(`Error: '${projectPath}' is a file, not a directory. Provide a project directory.`);
     process.exit(1);
   }
 
@@ -120,6 +139,11 @@ export async function main(argv) {
   // Phase 2: Budget
   const selected = budgeter.select(files, opts.maxFiles);
   console.log(`  Selected ${selected.length} files for analysis`);
+
+  if (selected.length === 0) {
+    console.error('Error: No files selected for analysis. Try increasing --max-files or check your project files.');
+    process.exit(1);
+  }
 
   if (opts.verbose) {
     console.log('\n  Files sent to Gemini:');
