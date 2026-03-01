@@ -4,7 +4,7 @@ import { join, relative, extname, basename } from 'node:path';
 // File extensions we care about
 const SOURCE_EXTS = new Set([
   '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
-  '.py', '.pyw',
+  '.py', '.pyw', // Python sources
   '.go',
   '.rs',
   '.rb',
@@ -64,10 +64,18 @@ const CONFIG_FILES = new Set([
   'Cargo.toml',
   'go.mod',
   'go.sum',
+  // --- Python specific additions ---
   'requirements.txt',
   'pyproject.toml',
   'setup.py',
   'setup.cfg',
+  'Pipfile',
+  'Pipfile.lock',
+  'poetry.lock',
+  'manage.py', // Strongly indicates Django
+  'wsgi.py',   // Often used in Django/Flask deployments
+  'asgi.py',   // Often used in FastAPI/Django deployments
+  // ---------------------------------
   'Gemfile',
   'pom.xml',
   'build.gradle',
@@ -90,11 +98,15 @@ const SKIP_DIRS = new Set([
   '.nuxt',
   '.output',
   '.svelte-kit',
+  // --- Python specific ignores ---
   '__pycache__',
   '.pytest_cache',
   'venv',
   '.venv',
   'env',
+  '.tox',
+  '.mypy_cache',
+  // -------------------------------
   'target',
   'vendor',
   'coverage',
@@ -189,11 +201,45 @@ async function walk(dir, projectPath, gitignorePatterns, results) {
   }
 }
 
+// Exported helper function for Python detection, separated so it doesn't break scanner.scan()
+export function detectPython(files) {
+  const pythonManifests = new Set(['requirements.txt', 'pyproject.toml', 'setup.py', 'setup.cfg', 'Pipfile']);
+  
+  const hasPythonFiles = files.some(f => f.ext === '.py');
+  const hasPythonManifest = files.some(f => pythonManifests.has(basename(f.relativePath)));
+
+  if (!hasPythonFiles && !hasPythonManifest) {
+    return null; // Not a Python project
+  }
+
+  let hasDjango = files.some(f => basename(f.relativePath) === 'manage.py');
+  let hasFlask = false;
+  let hasFastAPI = false;
+
+  // Scan manifest contents for frameworks
+  for (const file of files) {
+    if (pythonManifests.has(basename(file.relativePath))) {
+      const content = file.content.toLowerCase();
+      if (content.includes('django')) hasDjango = true;
+      if (content.includes('flask')) hasFlask = true;
+      if (content.includes('fastapi')) hasFastAPI = true;
+    }
+  }
+
+  const frameworks = [];
+  if (hasDjango) frameworks.push('Django');
+  if (hasFlask) frameworks.push('Flask');
+  if (hasFastAPI) frameworks.push('FastAPI');
+
+  return { language: 'Python', frameworks };
+}
+
 export const scanner = {
   async scan(projectPath) {
     const gitignorePatterns = await loadGitignore(projectPath);
     const results = [];
     await walk(projectPath, projectPath, gitignorePatterns, results);
+    // Returning the exact original flat array
     return results;
   },
 };
