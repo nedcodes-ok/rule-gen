@@ -88,15 +88,18 @@ Built with Node.js built-in modules only (`node:https`, `node:fs`, `node:path`).
 - Node.js 18+
 - A [Google Gemini API key](https://aistudio.google.com/apikey) (free tier works)
 
-## Part of the [nedcodes](https://nedcodes.dev) ecosystem
+## Next Step: Validate Your Rules
 
-| Tool | What it does |
-|------|-------------|
-| **[rule-gen](https://github.com/nedcodes-ok/rule-gen)** | Generate rules from your codebase ← you are here |
-| **[cursor-doctor](https://github.com/nedcodes-ok/cursor-doctor)** | Validate and fix your rules |
-| **[rule-porter](https://github.com/nedcodes-ok/rule-porter)** | Convert rules between formats |
+rule-gen creates rules. **[cursor-doctor](https://github.com/nedcodes-ok/cursor-doctor)** makes sure they work. Run it after generating:
 
-Generate → Validate → Convert. One pipeline, three tools.
+```bash
+npx cursor-doctor scan    # Check for issues
+npx cursor-doctor lint    # Detailed rule-by-rule linting
+```
+
+100+ checks for broken globs, vague instructions, conflicts, token waste, and more.
+
+Also: **[rule-porter](https://github.com/nedcodes-ok/rule-porter)** converts rules between Cursor, Claude, Copilot, and Windsurf.
 
 ## License
 
