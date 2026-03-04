@@ -1,5 +1,8 @@
 # rule-gen
 
+![Cursor Rules](https://img.shields.io/badge/Cursor%20Rules-validated-brightgreen)
+
+
 [![npm version](https://img.shields.io/npm/v/rulegen-ai)](https://www.npmjs.com/package/rulegen-ai) [![npm downloads](https://img.shields.io/npm/dw/rulegen-ai)](https://www.npmjs.com/package/rulegen-ai) [![license](https://img.shields.io/npm/l/rulegen-ai)](https://github.com/nedcodes-ok/rule-gen/blob/main/LICENSE)
 
 **Stop writing Cursor rules by hand.**
