@@ -1,5 +1,6 @@
 import { request } from 'node:https';
 import { basename } from 'node:path';
+import { buildProjectInfo } from './detector.js';
 
 const API_BASE = 'generativelanguage.googleapis.com';
 
@@ -26,20 +27,12 @@ function buildPrompt(files, projectPath) {
   const projectName = basename(projectPath);
 
   // Detect project info from config files
-  const pkgFile = files.find(f => f.relativePath === 'package.json');
-  let projectInfo = '';
-  if (pkgFile) {
-    try {
-      const pkg = JSON.parse(pkgFile.content);
-      const deps = Object.keys(pkg.dependencies || {});
-      const devDeps = Object.keys(pkg.devDependencies || {});
-      projectInfo = `\nStack: ${deps.concat(devDeps).join(', ') || 'none'} | Type: ${pkg.type || 'commonjs'}`;
-    } catch { /* ignore parse errors */ }
-  }
+  const projectInfo = buildProjectInfo(files);
+  const projectInfoLine = projectInfo ? `\n${projectInfo}` : '';
 
   let prompt = `You are writing rules for an AI coding assistant. These rules tell the AI HOW TO WRITE NEW CODE in this project. They are NOT documentation of what the code does.
 
-PROJECT: ${projectName}${projectInfo}
+PROJECT: ${projectName}${projectInfoLine}
 
 WHAT ARE RULES FOR:
 Rules guide an AI that is writing or modifying code in this project. They answer: "If the AI needs to add a new feature or fix a bug, what patterns must it follow?"
