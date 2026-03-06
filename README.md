@@ -55,9 +55,27 @@ Not "use TypeScript" or "write clean code". Rules like:
 ## How it works
 
 1. **Scans** your project tree (respects `.gitignore`, skips binaries)
-2. **Prioritizes** config files, entry points, routes, and pattern-rich files to fit Gemini's context window
-3. **Sends everything in one request** — Gemini's 1M token context sees your whole codebase at once. No chunking, no lost context.
-4. **Writes** valid rule files in your chosen format
+2. **Detects** your stack — Node.js, Python frameworks (Django, Flask, FastAPI), testing tools, linters, type checkers
+3. **Prioritizes** config files, entry points, routes, and pattern-rich files to fit Gemini's context window
+4. **Sends everything in one request** — Gemini's 1M token context sees your whole codebase at once. No chunking, no lost context.
+5. **Writes** valid rule files in your chosen format
+
+## Language & framework support
+
+rule-gen auto-detects:
+
+**Python**
+- Frameworks: Django, Flask, FastAPI, Tornado, Sanic, and 10+ more
+- Testing: pytest, unittest, nose, tox, coverage
+- Type checking: mypy, pyright, pyre, pytype
+- Linting: ruff, flake8, pylint, black, isort, bandit
+- Package managers: Poetry, Pipenv, pip, setuptools
+
+**Node.js/TypeScript**
+- Detects from `package.json` dependencies
+- Identifies module type (ESM/CommonJS)
+
+This context helps Gemini generate rules specific to your stack — e.g., Django best practices for Django projects, FastAPI patterns for FastAPI apps.
 
 ## Options
 
