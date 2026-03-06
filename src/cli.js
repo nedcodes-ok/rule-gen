@@ -23,6 +23,7 @@ Arguments:
 Options:
   --format <format>   Output format: cursor (default), claude-md, agents-md, copilot, windsurf
   --model <model>     Gemini model (default: gemini-2.5-flash)
+  --output-dir <dir>  Directory to write rules to (default: project directory)
   --dry-run           Preview rules without writing files
   --verbose           Show which files are sent to Gemini
   --max-files <n>     Max source files to include (default: 50)
@@ -39,11 +40,12 @@ Examples:
   npx rule-gen --model gemini-2.5-pro   # Use Pro for higher quality
 `.trim();
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const opts = {
     path: '.',
     format: 'cursor',
     model: 'gemini-2.5-flash',
+    outputDir: null,
     dryRun: false,
     verbose: false,
     maxFiles: 50,
@@ -64,6 +66,9 @@ function parseArgs(argv) {
         break;
       case '--model':
         opts.model = argv[++i];
+        break;
+      case '--output-dir':
+        opts.outputDir = argv[++i];
         break;
       case '--dry-run':
         opts.dryRun = true;
@@ -174,7 +179,8 @@ export async function main(argv) {
       console.log('');
     }
   } else {
-    const written = await writer.write(rules, projectPath, opts.format);
+    const outputDir = opts.outputDir ? resolve(opts.outputDir) : projectPath;
+    const written = await writer.write(rules, outputDir, opts.format);
     console.log(`\nWritten ${written.length} files:`);
     for (const f of written) {
       console.log(`  ✓ ${f}`);
